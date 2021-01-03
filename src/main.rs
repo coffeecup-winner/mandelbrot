@@ -1,13 +1,22 @@
-use sdl2::{
-    event::Event, keyboard::Keycode, pixels::Color, rect::Point, render::Canvas, video::Window,
-};
 use std::time::Duration;
+
+use rayon::prelude::*;
+use sdl2::{event::Event, keyboard::Keycode, pixels::Color, rect::Point};
 
 struct Viewport {
     x: f64,
     y: f64,
     width: f64,
     height: f64,
+    pixel_width: f64,
+    pixel_height: f64,
+}
+
+#[derive(Clone, Copy)]
+struct Pixel {
+    x: i32,
+    y: i32,
+    color: Color,
 }
 
 fn iterate_point(cr: f64, ci: f64, max_iter: u32) -> u32 {
@@ -35,33 +44,23 @@ fn is_in_period2_bulb(r: f64, i: f64) -> bool {
     ((r + 1.0).powi(2) + i.powi(2)) <= (1.0 / 16.0)
 }
 
-fn draw_mandelbrot(
-    canvas: &mut Canvas<Window>,
-    viewport: &Viewport,
-    palette: &[Color],
-) -> Result<(), String> {
-    let (width, height) = canvas.output_size().unwrap();
-
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
-    canvas.clear();
-
-    for x in 0..width {
-        for y in 0..height {
-            let r = viewport.x + ((x as f64 + 0.5) / width as f64) * viewport.width;
-            let i = viewport.y + ((y as f64 + 0.5) / height as f64) * viewport.height;
-            if !is_in_cardioid(r, i) && !is_in_period2_bulb(r, i) {
-                match iterate_point(r, i, 1000) {
-                    1000 => {}
-                    iter => {
-                        canvas.set_draw_color(palette[iter as usize]);
-                        canvas.draw_point(Point::new(x as i32, y as i32))?;
-                    }
-                };
+fn draw_mandelbrot(pixel_buffer: &mut [Pixel], viewport: &Viewport, palette: &[Color]) {
+    pixel_buffer.par_iter_mut().for_each(|pixel| {
+        let r =
+            viewport.x + ((pixel.x as f64 + 0.5) / viewport.pixel_width as f64) * viewport.width;
+        let i =
+            viewport.y + ((pixel.y as f64 + 0.5) / viewport.pixel_height as f64) * viewport.height;
+        if !is_in_cardioid(r, i) && !is_in_period2_bulb(r, i) {
+            let iter = iterate_point(r, i, 1000);
+            if iter != 1000 {
+                pixel.color = palette[iter as usize];
+            } else {
+                pixel.color = Color::BLACK;
             }
+        } else {
+            pixel.color = Color::BLACK;
         }
-    }
-
-    Ok(())
+    });
 }
 
 enum PaletteType {
@@ -86,15 +85,15 @@ fn create_palette(n: u32, type_: PaletteType) -> Vec<Color> {
 
 pub fn main() -> Result<(), String> {
     static WINDOW_NAME: &str = "Mandelbrot Explorer";
-    const VIEWPORT_WIDTH: u32 = 1050;
-    const VIEWPORT_HEIGHT: u32 = 600;
+    const WINDOW_WIDTH: u32 = 1050;
+    const WINDOW_HEIGHT: u32 = 600;
     const FRAMES_PER_SECOND: u32 = 60;
 
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
 
     let window = video_subsystem
-        .window(WINDOW_NAME, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+        .window(WINDOW_NAME, WINDOW_WIDTH, WINDOW_HEIGHT)
         .position_centered()
         .build()
         .map_err(|e| e.to_string())?;
@@ -105,10 +104,35 @@ pub fn main() -> Result<(), String> {
         y: -1.0,
         width: 3.5,
         height: 2.0,
+        pixel_width: WINDOW_WIDTH as f64,
+        pixel_height: WINDOW_HEIGHT as f64,
     };
 
     let palette = create_palette(1000, PaletteType::PseudoRandom);
-    draw_mandelbrot(&mut canvas, &viewport, &palette)?;
+
+    let mut pixel_buffer = vec![
+        Pixel {
+            x: 0,
+            y: 0,
+            color: Color::BLACK
+        };
+        (WINDOW_WIDTH * WINDOW_HEIGHT) as usize
+    ];
+
+    let mut i = 0;
+    for x in 0..WINDOW_WIDTH {
+        for y in 0..WINDOW_HEIGHT {
+            pixel_buffer[i].x = x as i32;
+            pixel_buffer[i].y = y as i32;
+            i += 1;
+        }
+    }
+
+    draw_mandelbrot(&mut pixel_buffer, &viewport, &palette);
+    for pixel in &pixel_buffer {
+        canvas.set_draw_color(pixel.color);
+        canvas.draw_point(Point::new(pixel.x, pixel.y))?;
+    }
 
     let mut event_pump = sdl_context.event_pump()?;
     'main: loop {
@@ -150,7 +174,11 @@ pub fn main() -> Result<(), String> {
                         }
                         _ => {}
                     }
-                    draw_mandelbrot(&mut canvas, &viewport, &palette)?;
+                    draw_mandelbrot(&mut pixel_buffer, &viewport, &palette);
+                    for pixel in &pixel_buffer {
+                        canvas.set_draw_color(pixel.color);
+                        canvas.draw_point(Point::new(pixel.x, pixel.y))?;
+                    }
                 }
                 _ => {}
             }
