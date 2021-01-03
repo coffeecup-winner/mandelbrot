@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use palette::{Gradient, Hsv, LinSrgb};
 use rayon::prelude::*;
 use sdl2::{event::Event, keyboard::Keycode, mouse::MouseButton, pixels::Color, rect::Point};
 
@@ -91,6 +92,7 @@ fn draw_mandelbrot(pixel_buffer: &mut [Pixel], viewport: &Viewport, palette: &[C
 
 enum PaletteType {
     PseudoRandom,
+    HslGradient,
 }
 
 fn create_palette(n: u32, type_: PaletteType) -> Vec<Color> {
@@ -102,6 +104,21 @@ fn create_palette(n: u32, type_: PaletteType) -> Vec<Color> {
                     (i * 1337) as u8,
                     (i * 173) as u8,
                     (i * 6101) as u8,
+                ));
+            }
+        }
+        PaletteType::HslGradient => {
+            let grad = Gradient::new(vec![
+                Hsv::from(LinSrgb::new(0.1, 1.0, 1.0)),
+                Hsv::from(LinSrgb::new(1.0, 0.1, 0.1)),
+            ]);
+
+            for color in grad.take(n as usize) {
+                let c: LinSrgb = color.into();
+                palette.push(Color::RGB(
+                    (c.red * 255.0) as u8,
+                    (c.green * 255.0) as u8,
+                    (c.blue * 255.0) as u8,
                 ));
             }
         }
@@ -134,7 +151,7 @@ pub fn main() -> Result<(), String> {
         pixel_height: WINDOW_HEIGHT as f64,
     };
 
-    let palette = create_palette(1000, PaletteType::PseudoRandom);
+    let palette = create_palette(1000, PaletteType::HslGradient);
 
     let mut pixel_buffer = vec![
         Pixel {
