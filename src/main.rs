@@ -4,31 +4,34 @@ use sdl2::{
 use std::time::Duration;
 
 struct Viewport {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
 }
 
-fn iterate_point(cr: f32, ci: f32, max_iter: u32) -> u32 {
+fn iterate_point(cr: f64, ci: f64, max_iter: u32) -> u32 {
     let mut iter = 0;
     let mut r = 0.0;
     let mut i = 0.0;
-    while r * r + i * i < 2.0 * 2.0 && iter < max_iter {
-        let new_r = r * r - i * i + cr;
-        i = 2.0 * r * i + ci;
-        r = new_r;
+    let mut r2 = 0.0;
+    let mut i2 = 0.0;
+    while r2 + i2 < 4.0 && iter < max_iter {
+        i = (r + r) * i + ci;
+        r = r2 - i2 + cr;
+        r2 = r * r;
+        i2 = i * i;
         iter += 1;
     }
     iter
 }
 
-fn is_in_cardioid(r: f32, i: f32) -> bool {
+fn is_in_cardioid(r: f64, i: f64) -> bool {
     let p = ((r - 1.0 / 4.0).powi(2) + i.powi(2)).sqrt();
     r <= (p - 2.0 * p.powi(2) + 1.0 / 4.0)
 }
 
-fn is_in_period2_bulb(r: f32, i: f32) -> bool {
+fn is_in_period2_bulb(r: f64, i: f64) -> bool {
     ((r + 1.0).powi(2) + i.powi(2)) <= (1.0 / 16.0)
 }
 
@@ -44,8 +47,8 @@ fn draw_mandelbrot(
 
     for x in 0..width {
         for y in 0..height {
-            let r = viewport.x + ((x as f32 + 0.5) / width as f32) * viewport.width;
-            let i = viewport.y + ((y as f32 + 0.5) / height as f32) * viewport.height;
+            let r = viewport.x + ((x as f64 + 0.5) / width as f64) * viewport.width;
+            let i = viewport.y + ((y as f64 + 0.5) / height as f64) * viewport.height;
             if !is_in_cardioid(r, i) && !is_in_period2_bulb(r, i) {
                 match iterate_point(r, i, 1000) {
                     1000 => {}
