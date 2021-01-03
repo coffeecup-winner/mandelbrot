@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use rayon::prelude::*;
-use sdl2::{event::Event, keyboard::Keycode, pixels::Color, rect::Point};
+use sdl2::{event::Event, keyboard::Keycode, mouse::MouseButton, pixels::Color, rect::Point};
 
 struct Viewport {
     x: f64,
@@ -10,6 +10,32 @@ struct Viewport {
     height: f64,
     pixel_width: f64,
     pixel_height: f64,
+}
+
+impl Viewport {
+    pub fn offset_x(&mut self, offset: f64) {
+        self.x += self.width * offset;
+    }
+
+    pub fn offset_y(&mut self, offset: f64) {
+        self.y += self.height * offset;
+    }
+
+    pub fn zoom_in(&mut self, factor: f64) {
+        let offset_factor = factor / 2.0;
+        self.x += self.width * offset_factor;
+        self.y += self.height * offset_factor;
+        self.height *= 1.0 - factor;
+        self.width *= 1.0 - factor;
+    }
+
+    pub fn zoom_out(&mut self, factor: f64) {
+        let offset_factor = factor / 2.0;
+        self.height /= 1.0 - factor;
+        self.width /= 1.0 - factor;
+        self.x -= self.width * offset_factor;
+        self.y -= self.height * offset_factor;
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -133,9 +159,11 @@ pub fn main() -> Result<(), String> {
         canvas.set_draw_color(pixel.color);
         canvas.draw_point(Point::new(pixel.x, pixel.y))?;
     }
+    canvas.present();
 
     let mut event_pump = sdl_context.event_pump()?;
     'main: loop {
+        let mut needs_refresh = false;
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -149,42 +177,55 @@ pub fn main() -> Result<(), String> {
                 } => {
                     match code {
                         Keycode::A => {
-                            viewport.x -= viewport.width / 100.0;
+                            viewport.offset_x(-0.1);
                         }
                         Keycode::D => {
-                            viewport.x += viewport.width / 100.0;
+                            viewport.offset_x(0.1);
                         }
                         Keycode::W => {
-                            viewport.y -= viewport.height / 100.0;
+                            viewport.offset_y(-0.1);
                         }
                         Keycode::S => {
-                            viewport.y += viewport.height / 100.0;
+                            viewport.offset_y(0.1);
                         }
                         Keycode::E => {
-                            viewport.x += viewport.width / 10.0;
-                            viewport.y += viewport.height / 10.0;
-                            viewport.height *= 0.8;
-                            viewport.width *= 0.8;
+                            viewport.zoom_in(0.2);
                         }
                         Keycode::Q => {
-                            viewport.height /= 0.8;
-                            viewport.width /= 0.8;
-                            viewport.x -= viewport.width / 10.0;
-                            viewport.y -= viewport.height / 10.0;
+                            viewport.zoom_out(0.2);
                         }
                         _ => {}
                     }
-                    draw_mandelbrot(&mut pixel_buffer, &viewport, &palette);
-                    for pixel in &pixel_buffer {
-                        canvas.set_draw_color(pixel.color);
-                        canvas.draw_point(Point::new(pixel.x, pixel.y))?;
+                    needs_refresh = true;
+                }
+                Event::MouseButtonDown {
+                    x, y, mouse_btn, ..
+                } => {
+                    viewport.offset_x((x - WINDOW_WIDTH as i32 / 2) as f64 / WINDOW_WIDTH as f64);
+                    viewport.offset_y((y - WINDOW_HEIGHT as i32 / 2) as f64 / WINDOW_HEIGHT as f64);
+                    match mouse_btn {
+                        MouseButton::Left => {
+                            viewport.zoom_in(0.2);
+                        }
+                        MouseButton::Right => {
+                            viewport.zoom_out(0.2);
+                        }
+                        _ => {}
                     }
+                    needs_refresh = true;
                 }
                 _ => {}
             }
         }
 
-        canvas.present();
+        if needs_refresh {
+            draw_mandelbrot(&mut pixel_buffer, &viewport, &palette);
+            for pixel in &pixel_buffer {
+                canvas.set_draw_color(pixel.color);
+                canvas.draw_point(Point::new(pixel.x, pixel.y))?;
+            }
+            canvas.present();
+        }
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / FRAMES_PER_SECOND));
     }
 
