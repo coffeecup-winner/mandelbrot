@@ -23,7 +23,11 @@ fn iterate_point(cr: f32, ci: f32, max_iter: u32) -> u32 {
     iter
 }
 
-fn draw_mandelbrot(canvas: &mut Canvas<Window>, viewport: &Viewport) -> Result<(), String> {
+fn draw_mandelbrot(
+    canvas: &mut Canvas<Window>,
+    viewport: &Viewport,
+    palette: &[Color],
+) -> Result<(), String> {
     let (width, height) = canvas.output_size().unwrap();
 
     canvas.set_draw_color(Color::RGB(0, 0, 0));
@@ -34,21 +38,34 @@ fn draw_mandelbrot(canvas: &mut Canvas<Window>, viewport: &Viewport) -> Result<(
             let r = viewport.x + ((x as f32 + 0.5) / width as f32) * viewport.width;
             let i = viewport.y + ((y as f32 + 0.5) / height as f32) * viewport.height;
             match iterate_point(r, i, 1000) {
-                1 | 1000 => canvas.set_draw_color(Color::RGB(0, 0, 0)),
-                iter => {
-                    let intensity = (1000.0 - iter as f32) / 1000.0;
-                    canvas.set_draw_color(Color::RGB(
-                        (128.0 * intensity) as u8,
-                        (128.0 * intensity) as u8,
-                        (255.0 * intensity) as u8,
-                    ));
-                }
+                1000 => canvas.set_draw_color(Color::RGB(0, 0, 0)),
+                iter => canvas.set_draw_color(palette[iter as usize]),
             };
             canvas.draw_point(Point::new(x as i32, y as i32))?;
         }
     }
 
     Ok(())
+}
+
+enum PaletteType {
+    PseudoRandom,
+}
+
+fn create_palette(n: u32, type_: PaletteType) -> Vec<Color> {
+    let mut palette = vec![];
+    match type_ {
+        PaletteType::PseudoRandom => {
+            for i in 0..n {
+                palette.push(Color::RGB(
+                    (i * 1337) as u8,
+                    (i * 173) as u8,
+                    (i * 6101) as u8,
+                ));
+            }
+        }
+    }
+    palette
 }
 
 pub fn main() -> Result<(), String> {
@@ -74,7 +91,8 @@ pub fn main() -> Result<(), String> {
         height: 2.0,
     };
 
-    draw_mandelbrot(&mut canvas, &viewport)?;
+    let palette = create_palette(1000, PaletteType::PseudoRandom);
+    draw_mandelbrot(&mut canvas, &viewport, &palette)?;
 
     let mut event_pump = sdl_context.event_pump()?;
     'main: loop {
@@ -116,7 +134,7 @@ pub fn main() -> Result<(), String> {
                         }
                         _ => {}
                     }
-                    draw_mandelbrot(&mut canvas, &viewport)?;
+                    draw_mandelbrot(&mut canvas, &viewport, &palette)?;
                 }
                 _ => {}
             }
