@@ -1,5 +1,14 @@
-use sdl2::{event::Event, keyboard::Keycode, pixels::Color, rect::Point, render::Canvas, video::Window};
+use sdl2::{
+    event::Event, keyboard::Keycode, pixels::Color, rect::Point, render::Canvas, video::Window,
+};
 use std::time::Duration;
+
+struct Viewport {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
 
 fn iterate_point(cr: f32, ci: f32, max_iter: u32) -> u32 {
     let mut iter = 0;
@@ -14,18 +23,27 @@ fn iterate_point(cr: f32, ci: f32, max_iter: u32) -> u32 {
     iter
 }
 
-fn draw_mandelbrot(canvas: &mut Canvas<Window>) -> Result<(), String> {
+fn draw_mandelbrot(canvas: &mut Canvas<Window>, viewport: &Viewport) -> Result<(), String> {
     let (width, height) = canvas.output_size().unwrap();
+
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
 
     for x in 0..width {
         for y in 0..height {
-            let r = -2.5 + ((x as f32 + 0.5) / width as f32) * 3.5;
-            let i = -1.0 + ((y as f32 + 0.5) / height as f32) * 2.0;
-            if iterate_point(r, i, 1000) == 1000 {
-                canvas.set_draw_color(Color::RGB(0, 0, 0));
-            } else {
-                canvas.set_draw_color(Color::RGB(128, 128, 128));
-            }
+            let r = viewport.x + ((x as f32 + 0.5) / width as f32) * viewport.width;
+            let i = viewport.y + ((y as f32 + 0.5) / height as f32) * viewport.height;
+            match iterate_point(r, i, 1000) {
+                1 | 1000 => canvas.set_draw_color(Color::RGB(0, 0, 0)),
+                iter => {
+                    let intensity = (1000.0 - iter as f32) / 1000.0;
+                    canvas.set_draw_color(Color::RGB(
+                        (128.0 * intensity) as u8,
+                        (128.0 * intensity) as u8,
+                        (255.0 * intensity) as u8,
+                    ));
+                }
+            };
             canvas.draw_point(Point::new(x as i32, y as i32))?;
         }
     }
@@ -49,14 +67,17 @@ pub fn main() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+    let mut viewport = Viewport {
+        x: -2.5,
+        y: -1.0,
+        width: 3.5,
+        height: 2.0,
+    };
+
+    draw_mandelbrot(&mut canvas, &viewport)?;
 
     let mut event_pump = sdl_context.event_pump()?;
     'main: loop {
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas.clear();
-
-        draw_mandelbrot(&mut canvas)?;
-
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -64,6 +85,39 @@ pub fn main() -> Result<(), String> {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'main,
+                Event::KeyDown {
+                    keycode: Some(code),
+                    ..
+                } => {
+                    match code {
+                        Keycode::A => {
+                            viewport.x -= viewport.width / 100.0;
+                        }
+                        Keycode::D => {
+                            viewport.x += viewport.width / 100.0;
+                        }
+                        Keycode::W => {
+                            viewport.y -= viewport.height / 100.0;
+                        }
+                        Keycode::S => {
+                            viewport.y += viewport.height / 100.0;
+                        }
+                        Keycode::E => {
+                            viewport.x += viewport.width / 10.0;
+                            viewport.y += viewport.height / 10.0;
+                            viewport.height *= 0.8;
+                            viewport.width *= 0.8;
+                        }
+                        Keycode::Q => {
+                            viewport.height /= 0.8;
+                            viewport.width /= 0.8;
+                            viewport.x -= viewport.width / 10.0;
+                            viewport.y -= viewport.height / 10.0;
+                        }
+                        _ => {}
+                    }
+                    draw_mandelbrot(&mut canvas, &viewport)?;
+                }
                 _ => {}
             }
         }
