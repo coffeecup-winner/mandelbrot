@@ -1,9 +1,11 @@
-use std::time::Duration;
+use std::fs::File;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use palette::{Gradient, Hsv, LinSrgb};
 use rayon::prelude::*;
 use sdl2::{event::Event, keyboard::Keycode, mouse::MouseButton, pixels::Color, rect::Point};
 
+#[derive(Clone)]
 struct Viewport {
     x: f64,
     y: f64,
@@ -163,8 +165,8 @@ pub fn main() -> Result<(), String> {
     ];
 
     let mut i = 0;
-    for x in 0..WINDOW_WIDTH {
-        for y in 0..WINDOW_HEIGHT {
+    for y in 0..WINDOW_HEIGHT {
+        for x in 0..WINDOW_WIDTH {
             pixel_buffer[i].x = x as i32;
             pixel_buffer[i].y = y as i32;
             i += 1;
@@ -210,6 +212,47 @@ pub fn main() -> Result<(), String> {
                         }
                         Keycode::Q => {
                             viewport.zoom_out(0.2);
+                        }
+                        Keycode::G => {
+                            let filename = format!(
+                                "mandelbrot_{}.gif",
+                                SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .map_err(|e| e.to_string())?
+                                    .as_secs()
+                            );
+                            println!("Writing {}... ", filename);
+                            let mut image = File::create(&filename).map_err(|e| e.to_string())?;
+                            let mut encoder = gif::Encoder::new(
+                                &mut image,
+                                WINDOW_WIDTH as u16,
+                                WINDOW_HEIGHT as u16,
+                                &[],
+                            )
+                            .map_err(|e| e.to_string())?;
+
+                            let mut v = viewport.clone();
+                            let mut buffer = pixel_buffer.clone();
+
+                            while v.height < 4.0 {
+                                draw_mandelbrot(&mut buffer, &v, &palette);
+                                let mut pixels =
+                                    Vec::with_capacity((3 * WINDOW_WIDTH * WINDOW_HEIGHT) as usize);
+                                for p in &buffer {
+                                    pixels.push(p.color.r);
+                                    pixels.push(p.color.g);
+                                    pixels.push(p.color.b);
+                                }
+                                let frame = gif::Frame::from_rgb_speed(
+                                    WINDOW_WIDTH as u16,
+                                    WINDOW_HEIGHT as u16,
+                                    &pixels,
+                                    10,
+                                );
+                                encoder.write_frame(&frame).map_err(|e| e.to_string())?;
+                                v.zoom_out(0.1);
+                            }
+                            println!("Done!");
                         }
                         _ => {}
                     }
