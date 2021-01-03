@@ -23,6 +23,15 @@ fn iterate_point(cr: f32, ci: f32, max_iter: u32) -> u32 {
     iter
 }
 
+fn is_in_cardioid(r: f32, i: f32) -> bool {
+    let p = ((r - 1.0 / 4.0).powi(2) + i.powi(2)).sqrt();
+    r <= (p - 2.0 * p.powi(2) + 1.0 / 4.0)
+}
+
+fn is_in_period2_bulb(r: f32, i: f32) -> bool {
+    ((r + 1.0).powi(2) + i.powi(2)) <= (1.0 / 16.0)
+}
+
 fn draw_mandelbrot(
     canvas: &mut Canvas<Window>,
     viewport: &Viewport,
@@ -37,11 +46,15 @@ fn draw_mandelbrot(
         for y in 0..height {
             let r = viewport.x + ((x as f32 + 0.5) / width as f32) * viewport.width;
             let i = viewport.y + ((y as f32 + 0.5) / height as f32) * viewport.height;
-            match iterate_point(r, i, 1000) {
-                1000 => canvas.set_draw_color(Color::RGB(0, 0, 0)),
-                iter => canvas.set_draw_color(palette[iter as usize]),
-            };
-            canvas.draw_point(Point::new(x as i32, y as i32))?;
+            if !is_in_cardioid(r, i) && !is_in_period2_bulb(r, i) {
+                match iterate_point(r, i, 1000) {
+                    1000 => {}
+                    iter => {
+                        canvas.set_draw_color(palette[iter as usize]);
+                        canvas.draw_point(Point::new(x as i32, y as i32))?;
+                    }
+                };
+            }
         }
     }
 
